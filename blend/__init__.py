@@ -4,6 +4,7 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 import numpy as np
 from numpy.typing import NDArray
+from tensorboard.compat.tensorflow_stub.dtypes import float32
 
 
 class Model:
@@ -30,25 +31,23 @@ class Model:
 
 
         M_ichol = spla.spilu(self.MTM)
-        self.P = spla.LinearOperator(self.MTM.shape, M_ichol.solve)
+        self.P = spla.LinearOperator(self.MTM.shape, M_ichol.solve, dtype=np.float32)
 
         cfs = np.zeros(m, np.float32)
         cfs[0] = 1.
 
-        x = time.time()
         self.calc_mesh(cfs)
-        y = time.time()
-        print(f"calcingmesh took {y-x}s")
 
     def calc_mesh(self, coefficients: NDArray[np.float32]) -> NDArray[np.float32]:
-
-
+        x = time.time()
         # calc blended edges
         d = np.tensordot(coefficients, self.cano_edges, axes=1)
         # calc MTd
         MTd = self.MT.dot(d)
         # solve for vertices according to MTM * v = MTd
-        v = np.column_stack([spla.cg(self.MTM, MTd[:, i], M=self.P)[0] for i in range(MTd.shape[1])])
+        v = np.column_stack([spla.cg(self.MTM, MTd[:, i])[0] for i in range(MTd.shape[1])])
+        y = time.time()
+        print(f"calcingmesh took {y-x}s")
 
         return v
 
@@ -115,7 +114,6 @@ def setup_MT(ts: NDArray[np.int32], es:int, vs:int):
         mt_col[mt_idx1] = i
     return mt_val,mt_col, mt_row
 
-
 def setup_MTM(ts, vs, mt_row):
     adjacency = [None for _ in range(vs)]  # directed edge adjacency list
     max_row = 0
@@ -178,5 +176,7 @@ def setup_MTM(ts, vs, mt_row):
 def setup_MT_MTM(ts: NDArray[np.int32], es:int, vs:int):
     mt_val, mt_col, mt_row = setup_MT(ts, es,vs)
     MT = sp.csr_matrix((mt_val, mt_col, mt_row))
-    MTM = sp.csr_matrix(setup_MTM(ts, vs, mt_row))
-    return MT,MTM
+    # MTM = sp.csr_matrix(setup_MTM(ts, vs, mt_row))
+    # MTM_ =
+    # assert MTM == MTM_
+    return MT,MT.dot(MT.T)

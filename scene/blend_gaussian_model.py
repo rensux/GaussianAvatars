@@ -43,9 +43,11 @@ class BlendGaussianModel(GaussianModel):
     def update_mesh_by_blending(self, blend_param):
         coefficients = blend_param['coefficients']
 
-        verts = torch.tensor(self.blend_model.calc_mesh(coefficients)).cuda()
-        # cano = torch.tensor(self.blend_model.cano_verts).cuda()
-        # self.update_mesh_properties(verts, cano)
+        v = self.blend_model.calc_mesh(coefficients)
+        print(v.shape)
+        verts = torch.from_numpy(v).cuda()
+        cano = torch.from_numpy(self.blend_model.cano_verts).cuda()
+        self.update_mesh_properties(verts, cano)
 
     def update_mesh_properties(self, verts, verts_cano):
         faces = self.flame_model.faces

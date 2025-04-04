@@ -105,16 +105,16 @@ class LocalViewer(Mini3DViewer):
                 )
             else:
                 raise FileNotFoundError(f"{self.cfg.point_path} does not exist.")
-        # x = time.time()
-        self.gaussians.load_meshes("media/cube/sample.ply", ["media/cube/sample_deformed.ply"])
-        # if self.cfg.mesh_path is not None:
-        #     if self.cfg.mesh_path.exists():
-        #         self.gaussians.load_meshes(
-        #             self.cfg.mesh_path,
-        #             [self.cfg.mesh_path],
-        #         )
-        #     else:
-        #         raise FileNotFoundError(f"{self.cfg.mesh_path} does not exist.")
+
+        # self.gaussians.load_meshes("media/cube/sample.ply", ["media/cube/sample_deformed.ply"])
+        if self.cfg.mesh_path is not None:
+            if self.cfg.mesh_path.exists():
+                self.gaussians.load_meshes(
+                    self.cfg.mesh_path,
+                    [self.cfg.mesh_path],
+                )
+            else:
+                raise FileNotFoundError(f"{self.cfg.mesh_path} does not exist.")
 
     def refresh_stat(self):
         if self.last_time_fresh is not None:
@@ -322,7 +322,7 @@ class LocalViewer(Mini3DViewer):
 
     def reset_blend_param(self):
         self.blend_params = {
-            "coefficients": np.ndarray(2,np.int32)
+            "coefficients": np.ndarray(2,dtype=np.int32)
         }
         self.blend_params["coefficients"][0] = 1
 
@@ -344,7 +344,7 @@ class LocalViewer(Mini3DViewer):
 
                 dpg.add_checkbox(
                     label="show splatting",
-                    default_value=True,
+                    default_value=False,
                     callback=callback_show_splatting,
                     tag="_checkbox_show_splatting",
                 )
@@ -358,7 +358,7 @@ class LocalViewer(Mini3DViewer):
 
                     dpg.add_checkbox(
                         label="show mesh",
-                        default_value=False,
+                        default_value=True,
                         callback=callback_show_mesh,
                         tag="_checkbox_show_mesh",
                     )
