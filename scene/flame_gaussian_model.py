@@ -147,7 +147,6 @@ class FlameGaussianModel(GaussianModel):
         self.face_orien_quat = quat_xyzw_to_wxyz(rotmat_to_unitquat(self.face_orien_mat))  # roma
 
         # for mesh rendering
-        print(verts.shape)
         self.verts = verts
         self.faces = faces
 

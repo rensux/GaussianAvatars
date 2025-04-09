@@ -13,7 +13,6 @@ class Model:
     MTM: sp.csc_matrix
     cano_edges: NDArray[np.float32] # M * E * 3
     cano_verts: NDArray[np.float32] # V * 3
-    verts: NDArray[np.float32] # V * 3
     LU: SuperLU
 
 
@@ -31,14 +30,11 @@ class Model:
 
 
     def calc_mesh(self, coefficients: NDArray[np.float32]):
-        print(f"calcing mesh with coefficients: {coefficients}")
         d = np.tensordot(coefficients, self.cano_edges, axes=1) # calc blended edges
         MTd = self.MT.dot(d) # calc MTd
         # Run each column in parallel using cuda streams
-        x = time.time()
-        self.LU.solve(MTd)
-        y = time.time()
-        print(f"cpu calc took {y-x}s")
+        v = self.LU.solve(MTd)
+        return v
 
     def load_MT_MTM(self, tris: NDArray[np.int32], vs: int, MT_matrix_path: Path | None = None):
         if MT_matrix_path is not None and MT_matrix_path.exists():

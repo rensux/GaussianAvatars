@@ -13,6 +13,25 @@ from utils.graphics_utils import compute_face_orientation
 # from pytorch3d.transforms import matrix_to_quaternion
 from roma import rotmat_to_unitquat, quat_xyzw_to_wxyz
 
+def load_mesh_from_flame(flame_model: FlameHead, path: Path):
+    if not path.exists():
+        raise FileNotFoundError(f"{path} does not exist.")
+
+    flame_param = np.load(str(path))
+    flame_param = {k: torch.from_numpy(v).cuda() for k, v in flame_param.items()}
+    return flame_model(
+        flame_param['shape'][None, ...],
+        flame_param['expr'][[0]],
+        flame_param['rotation'][[0]],
+        flame_param['neck_pose'][[0]],
+        flame_param['jaw_pose'][[0]],
+        flame_param['eyes_pose'][[0]],
+        flame_param['translation'][[0]],
+        zero_centered_at_root_node=False,
+        return_landmarks=False,
+        static_offset=flame_param['static_offset'],
+    )
+
 
 class BlendGaussianModel(GaussianModel):
     def __init__(self, sh_degree : int, disable_flame_static_offset=False, not_finetune_flame_params=False, n_shape=300, n_expr=100):
@@ -31,6 +50,7 @@ class BlendGaussianModel(GaussianModel):
         self.flame_param = None
         self.faces = self.flame_model.faces
         self.verts = None
+        self.verts_cano = None
         self.blend_model: blend.Model = None
 
 
@@ -44,10 +64,8 @@ class BlendGaussianModel(GaussianModel):
         coefficients = blend_param['coefficients']
 
         v = self.blend_model.calc_mesh(coefficients)
-        print(v.shape)
-        verts = torch.from_numpy(v).cuda()
-        cano = torch.from_numpy(self.blend_model.cano_verts).cuda()
-        self.update_mesh_properties(verts, cano)
+        verts = torch.from_numpy(v).unsqueeze(0).cuda()
+        self.update_mesh_properties(verts, None)
 
     def update_mesh_properties(self, verts, verts_cano):
         faces = self.flame_model.faces
@@ -66,7 +84,8 @@ class BlendGaussianModel(GaussianModel):
         self.faces = faces
 
         # for mesh regularization
-        self.verts_cano = verts_cano
+        if verts_cano is not None:
+            self.verts_cano = verts_cano
 
     def save_ply(self, path):
         super().save_ply(path)
@@ -76,6 +95,9 @@ class BlendGaussianModel(GaussianModel):
         np.savez(str(npz_path), **flame_param)
 
     def load_ply(self, path, **kwargs):
+        """
+        load the main model mesh and splats
+        """
         super().load_ply(path)
 
         if not kwargs['has_target']:
@@ -118,24 +140,17 @@ class BlendGaussianModel(GaussianModel):
 
         self.update_mesh_properties(self.verts, canno)
 
-    def load_meshes(self, main:str, blends:list[str]):
-        if blends is None:
-            blends = []
-        plydata = PlyData.read(main)
+    def init_model(self, blends:list[Path], MT_matrix_path: Path|None = None):
+        """
+        call after loading the main embedded splat model
+        """
+        blends = blends or []
 
-        tris = np.concatenate(np.asarray(plydata["face"]["vertex_indices"]))
-        m = len(blends)+1
-        vs = plydata["vertex"].count
-        mesh_verts = np.ndarray(shape=(m, vs, 3), dtype=np.float32)
-        mesh_verts[0] = np.stack((
-            np.asarray(plydata["vertex"]["x"]),
-            np.asarray(plydata["vertex"]["y"]),
-            np.asarray(plydata["vertex"]["z"])), axis=1)
-        for i in range(1,m):
-            plydata = PlyData.read(blends[i-1])
-            mesh_verts[i] = np.stack((
-                np.asarray(plydata["vertex"]["x"]),
-                np.asarray(plydata["vertex"]["y"]),
-                np.asarray(plydata["vertex"]["z"])), axis=1)
-        self.blend_model = blend.Model(tris, mesh_verts)
+        meshes = np.ndarray((len(blends) + 1, self.flame_model.v_template.shape[0], 3), dtype=np.float32)
+        meshes[0] = self.verts.cpu().numpy()
+        for i, p in enumerate(blends):
+            meshes[i + 1] = load_mesh_from_flame(self.flame_model, p).cpu().numpy()
+
+        self.blend_model = blend.Model(self.faces.cpu().numpy(), meshes, MT_matrix_path)
+
 

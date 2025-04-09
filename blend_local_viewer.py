@@ -17,6 +17,7 @@ import dearpygui.dearpygui as dpg
 import numpy as np
 import torch
 from PIL import Image
+from numpy.typing import NDArray
 from scipy.spatial.transform import Rotation as R
 from scipy.interpolate import interp1d
 import matplotlib
@@ -25,6 +26,21 @@ from scene.blend_gaussian_model import BlendGaussianModel
 from utils.viewer_utils import Mini3DViewer, Mini3DViewerConfig
 from gaussian_renderer import render
 from mesh_renderer import NVDiffRenderer
+
+def normalize_by(coeffs: NDArray[np.float32], dv: float, i: int):
+    np.clip(coeffs, 0., 1., out=coeffs)
+    n = len(coeffs)-1
+    v = coeffs[i]
+    other_sum = np.sum(coeffs) - v
+    if other_sum <= 0.:
+        coeffs.fill((1.-v)/n)
+    else:
+        coeffs -= coeffs*dv/other_sum
+
+    coeffs[i] = v
+    np.clip(coeffs, 0., 1., out=coeffs)
+
+
 
 
 @dataclass
@@ -42,8 +58,6 @@ class Config(Mini3DViewerConfig):
     """Camera convention"""
     point_path: Optional[Path] = None
     """Path to the gaussian splatting file"""
-    mesh_path: Optional[Path] = None
-    """Path to the mesh blend file"""
     motion_path: Optional[Path] = None
     """Path to the motion file (npz)"""
     sh_degree: int = 3
@@ -62,6 +76,9 @@ class Config(Mini3DViewerConfig):
     load it like a normal sequence. """
     demo_mode: bool = False
     """The UI will be simplified in demo mode."""
+
+    blend_model_paths: list[Path] = field(default_factory=lambda : [Path("./media/253/flame_param/00000.npz"),Path("./media/460/flame_param/00000.npz")])
+    MT_matrix_path: Path = Path("./media/flame_laplace_MT.npz")
 
 
 class LocalViewer(Mini3DViewer):
@@ -90,7 +107,7 @@ class LocalViewer(Mini3DViewer):
 
     def init_blend_data(self):
         # load gaussians
-        if (Path(self.cfg.point_path).parent / "flame_param.npz").exists() and Path(self.cfg.mesh_path).exists():
+        if (Path(self.cfg.point_path).parent / "flame_param.npz").exists():
             self.gaussians = BlendGaussianModel(self.cfg.sh_degree)
 
         unselected_fid = []
@@ -106,15 +123,7 @@ class LocalViewer(Mini3DViewer):
             else:
                 raise FileNotFoundError(f"{self.cfg.point_path} does not exist.")
 
-        # self.gaussians.load_meshes("media/cube/sample.ply", ["media/cube/sample_deformed.ply"])
-        if self.cfg.mesh_path is not None:
-            if self.cfg.mesh_path.exists():
-                self.gaussians.load_meshes(
-                    self.cfg.mesh_path,
-                    [self.cfg.mesh_path],
-                )
-            else:
-                raise FileNotFoundError(f"{self.cfg.mesh_path} does not exist.")
+        self.gaussians.init_model(cfg.blend_model_paths, cfg.MT_matrix_path)
 
     def refresh_stat(self):
         if self.last_time_fresh is not None:
@@ -322,7 +331,7 @@ class LocalViewer(Mini3DViewer):
 
     def reset_blend_param(self):
         self.blend_params = {
-            "coefficients": np.ndarray(2,dtype=np.int32)
+            "coefficients": np.zeros(len(cfg.blend_model_paths)+1,dtype=np.float32)
         }
         self.blend_params["coefficients"][0] = 1
 
@@ -578,8 +587,13 @@ class LocalViewer(Mini3DViewer):
                 dpg.add_separator()
 
                 def callback_set_coefficient(index):
-                    def callback(_, app_data):
+                    def callback(sender, app_data):
+                        dv = app_data - self.blend_params["coefficients"][index]
                         self.blend_params["coefficients"][index] = app_data
+                        normalize_by(self.blend_params["coefficients"], dv, index)
+                        for i in range(len(self.blend_params["coefficients"])):
+                            dpg.set_value(f"_slider-blend-coefficient-{i}", self.blend_params["coefficients"][i])
+
                         if not dpg.get_value("_checkbox_enable_control"):
                             dpg.set_value("_checkbox_enable_control", True)
                         self.gaussians.update_mesh_by_blending(self.blend_params)
@@ -588,20 +602,19 @@ class LocalViewer(Mini3DViewer):
 
                 dpg.add_text("Coefficients")
                 self.coefficient_sliders = []
-                for mesh in range(2):
-                    if "coefficients" in self.blend_params:
-                        with dpg.group(horizontal=True):
-                            dpg.add_slider_float(
-                                min_value=0,
-                                max_value=1,
-                                format="%.2f",
-                                default_value=self.blend_params["coefficients"][mesh],
-                                callback=callback_set_coefficient(mesh),
-                                tag=f"_slider-blend-coefficient-{mesh}",
-                                width=70,
-                            )
-                            self.coefficient_sliders.append(f"_slider-blend-coefficient-{mesh}")
-                            dpg.add_text(f"mesh{mesh}")
+                for mesh in range(len(self.blend_params["coefficients"])):
+                    with dpg.group(horizontal=True):
+                        dpg.add_slider_float(
+                            min_value=0,
+                            max_value=1,
+                            format="%.2f",
+                            default_value=self.blend_params["coefficients"][mesh],
+                            callback=callback_set_coefficient(mesh),
+                            tag=f"_slider-blend-coefficient-{mesh}",
+                            width=70,
+                        )
+                        self.coefficient_sliders.append(f"_slider-blend-coefficient-{mesh}")
+                        dpg.add_text(f"mesh{mesh}")
 
 
         # widget-dependent handlers ========================================================================================
