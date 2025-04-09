@@ -10,9 +10,6 @@ import torch
 import blend
 from flame_model.flame import FlameHead
 
-import cupy as cp
-import cupyx.scipy.sparse as csp
-
 
 @dataclass
 class Config:
@@ -61,39 +58,38 @@ def main(cfg: Config, n_shape=300, n_expr=100):
     y = time.time()
     print(f"setup took {y-x}s\n")
 
-    cfs = cp.array([0.2,0.4,0.4])
+    cfs = np.array([0.2,0.4,0.4], dtype=np.float32)
     model.calc_mesh(cfs)
 
     print("\n=======================\n")
 
-    cfs = cp.array([0.2,0.4,0.4])
+    cfs = np.array([0.2,0.4,0.4], dtype=np.float32)
     model.calc_mesh(cfs)
 
     print("\n=======================\n")
-    cfs = cp.array([0.2,0.4,0.4])
+    cfs = np.array([0.2,0.4,0.4], dtype=np.float32)
     model.calc_mesh(cfs)
 
     print("\n=======================\n")
-    cfs = cp.array([0.2,0.4,0.4])
+    cfs = np.array([0.2,0.4,0.4], dtype=np.float32)
     model.calc_mesh(cfs)
 
     print("\n=======================\n")
-    cfs = cp.array([0.2,0.4,0.4])
-    model.calc_mesh(cfs)
-
-    print("\n=======================\n")
-
-    cfs = cp.array([0.9,0.,0.1])
+    cfs = np.array([0.2,0.4,0.4], dtype=np.float32)
     model.calc_mesh(cfs)
 
     print("\n=======================\n")
 
-    cfs = cp.array([1.,0.,0.])
+    cfs = np.array([0.9,0.,0.1], dtype=np.float32)
+    model.calc_mesh(cfs)
+
+    print("\n=======================\n")
+
+    cfs = np.array([1.,0.,0.], dtype=np.float32)
     model.calc_mesh(cfs)
 
 
 
 if __name__ == "__main__":
-    x = cp.arange(10)
     cfg = tyro.cli(Config)
     main(cfg)
