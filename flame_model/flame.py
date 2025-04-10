@@ -617,6 +617,7 @@ class FlameMask(nn.Module):
             self.face_clusters = face_clusters
         
         self.construct_vid_table()
+        self.get_vid_by_region()
         self.process_face_mask(self.faces)
         self.process_face_clusters(self.face_clusters)
         if self.faces_t is not None:

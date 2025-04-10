@@ -1,5 +1,7 @@
 
 from pathlib import Path
+
+import numpy
 import numpy as np
 import torch
 from plyfile import PlyData
@@ -52,6 +54,7 @@ class BlendGaussianModel(GaussianModel):
         self.verts = None
         self.verts_cano = None
         self.blend_model: blend.Model = None
+
 
 
         # binding is initialized once the mesh topology is known
@@ -123,7 +126,7 @@ class BlendGaussianModel(GaussianModel):
             self._rotation = self._rotation[mask]
             self._opacity = self._opacity[mask]
 
-        self.verts, canno = self.flame_model(
+        self.verts, canno, lmk = self.flame_model(
             self.flame_param['shape'][None, ...],
             self.flame_param['expr'][[0]],
             self.flame_param['rotation'][[0]],
@@ -132,7 +135,7 @@ class BlendGaussianModel(GaussianModel):
             self.flame_param['eyes_pose'][[0]],
             self.flame_param['translation'][[0]],
             zero_centered_at_root_node=False,
-            return_landmarks=False,
+            return_landmarks=True,
             return_verts_cano=True,
             static_offset=self.flame_param['static_offset'],
             dynamic_offset=self.flame_param['dynamic_offset'][[0]],
@@ -150,7 +153,7 @@ class BlendGaussianModel(GaussianModel):
         meshes[0] = self.verts.cpu().numpy()
         for i, p in enumerate(blends):
             meshes[i + 1] = load_mesh_from_flame(self.flame_model, p).cpu().numpy()
-
-        self.blend_model = blend.Model(self.faces.cpu().numpy(), meshes, MT_matrix_path)
+        vert_mask = blend.mask.from_flame(self.flame_model.mask)
+        self.blend_model = blend.Model(self.faces.cpu().numpy(), meshes, vert_mask, MT_matrix_path)
 
 
