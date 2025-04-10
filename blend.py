@@ -14,7 +14,7 @@ from flame_model.flame import FlameHead
 @dataclass
 class Config:
     blend_model_paths: list[Path] = field(default_factory=lambda : [Path("./media/253/flame_param/00000.npz"),Path("./media/460/flame_param/00000.npz")])
-    main_model_path: Path = Path("./media/306/flame_param.npz")
+    main_model_path: Path = Path("media/teeth+eyes/306/flame_param.npz")
     MT_matrix_path: Path = Path("./media/flame_laplace_MT.npz")
 
 

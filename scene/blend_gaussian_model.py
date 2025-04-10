@@ -29,7 +29,7 @@ def load_mesh_from_flame(flame_model: FlameHead, path: Path):
         flame_param['translation'][[0]],
         zero_centered_at_root_node=False,
         return_landmarks=False,
-        static_offset=flame_param['static_offset'],
+        # static_offset=flame_param['static_offset'],
     )
 
 
@@ -45,7 +45,7 @@ class BlendGaussianModel(GaussianModel):
         self.flame_model = FlameHead(
             n_shape, 
             n_expr,
-            add_teeth=True,
+            add_teeth=False,
         ).cuda()
         self.flame_param = None
         self.faces = self.flame_model.faces
