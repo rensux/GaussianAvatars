@@ -89,6 +89,7 @@ class LocalViewer(Mini3DViewer):
         # self.init_gaussians()
 
         print("Initializing blend_data...")
+        self.reset_blend_param()
         self.init_blend_data()
 
         if self.gaussians.binding is not None:
@@ -98,10 +99,6 @@ class LocalViewer(Mini3DViewer):
             print("Initializing mesh renderer...")
             self.mesh_renderer = NVDiffRenderer(use_opengl=False)
 
-        # blend parameters
-        if self.gaussians.binding is not None:
-            print("Initializing blend parameters...")
-            self.reset_blend_param()
 
         super().__init__(cfg, "GaussianAvatars - Local Viewer")
 
