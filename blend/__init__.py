@@ -16,11 +16,11 @@ class Model:
     cano_edges: NDArray[np.float32] # M * E * 3
     vert_edge_binding: sp.csc_matrix # V x E
     LU: SuperLU
-    vert_mask: Mask
+    mask: Mask
 
 
-    def __init__(self, tris: NDArray[np.int32], mesh_verts: NDArray[np.float32], vert_mask:Mask, MT_matrix_path: Path|None = None):
-        self.vert_mask = vert_mask
+    def __init__(self, tris: NDArray[np.int32], mesh_verts: NDArray[np.float32], mask:Mask, MT_matrix_path: Path|None = None):
+        self.mask = mask
         self.load_MT_MTM(tris, mesh_verts.shape[1], MT_matrix_path)
 
         m = mesh_verts.shape[0]

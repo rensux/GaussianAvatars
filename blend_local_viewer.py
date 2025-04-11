@@ -17,6 +17,7 @@ import dearpygui.dearpygui as dpg
 import numpy as np
 import torch
 from PIL import Image
+from matplotlib.colors import to_rgb
 from numpy.typing import NDArray
 from scipy.spatial.transform import Rotation as R
 from scipy.interpolate import interp1d
@@ -466,6 +467,17 @@ class LocalViewer(Mini3DViewer):
                         self.face_colors = torch.from_numpy(
                             cmap(ct.cpu())[None, :, :3]
                         ).to(self.gaussians.verts)
+                    elif app_data == "triangle per regions":
+                        mask = self.gaussians.blend_model.mask
+                        cmap = matplotlib.colormaps['tab20']
+                        colors = [np.array(cmap(i / len(mask.parts))) for i in range(len(mask.parts))]
+                        face_colors = np.ndarray((1, mask.count, 3), dtype=np.float32)
+                        for i, fs in enumerate(mask.parts.values()):
+                                color=colors[i]
+                                bc = np.broadcast_to(color[:3].reshape(1,1,3), (1,len(fs),3))
+                                face_colors[:, fs, :] = bc
+                        self.face_colors = torch.from_numpy(face_colors).to(self.gaussians.verts)
+
                     else:
                         self.face_colors = (
                             self.mesh_color[:3]
@@ -475,9 +487,12 @@ class LocalViewer(Mini3DViewer):
 
                     dpg.set_value("_checkbox_show_mesh", True)
                     self.need_update = True
-
+                items = ["none", "number of points per face"]
+                if self.gaussians.blend_model.mask.kind == "face":
+                    items += ["triangle per regions"]
                 dpg.add_combo(
-                    ["none", "number of points per face"],
+                    items,
+                    # default_value="triangle per regions",
                     default_value="none",
                     label="visualization",
                     width=200,
