@@ -1,78 +1,95 @@
 from dataclasses import dataclass, fields
+from typing import Literal
+
 import numpy as np
 from numpy.typing import NDArray
 
 from flame_model.flame import FlameMask
 
+FLAME_PARTS=[
+    "left_eyeball",
+    "right_eyeball",
+    "left_eye_region",
+    "right_eye_region",
+    "lips",
+    "left_ear",
+    "right_ear",
+    "forehead",
+    "neck",
+    "scalp",
+    "nose",
+    "face",
+    "boundary",
+             ]
 
 @dataclass
 class Mask:
-    left_eyeball: NDArray[np.int32]
-    right_eyeball: NDArray[np.int32]
-    left_eye_region: NDArray[np.int32]
-    right_eye_region: NDArray[np.int32]
-    lips: NDArray[np.int32]
-    nose: NDArray[np.int32]
-    left_ear: NDArray[np.int32]
-    right_ear: NDArray[np.int32]
-    forehead: NDArray[np.int32]
-    neck: NDArray[np.int32]
-    boundary: NDArray[np.int32]
-    # left_half: NDArray[np.int32] # remainder
-    # right_half: NDArray[np.int32] # remainder
+    parts: dict[str, NDArray[np.int32]]
+    count: int
+    kind: Literal["vertex", "face"]
 
     def search(self):
-        flds = fields(self)
-        for i in range(len(flds)):
-            for j in range(len(flds)):
+        for i, f in enumerate(self.parts):
+            for j, g in enumerate(self.parts):
                 if j <= i:
                     continue
-                f = flds[i]
-                g = flds[j]
-                if f.name=="left_half" or g.name=="left_half" or f.name=="right_half" or g.name=="right_half" :
-                    continue
-                l = getattr(self, f.name)
-                r = getattr(self, g.name)
+                l = self.parts[f]
+                r = self.parts[g]
                 intersect = np.intersect1d(l,r)
                 intr = len(intersect)
                 if intr > 0:
-                    print(f"intersection for `{f.name}`[{intr}/{len(l)}] and `{g.name}`[{intr}/{len(r)}]")
+                    print(f"intersection for `{f}`[{intr}/{len(l)}] and `{g}`[{intr}/{len(r)}]")
 
-    def validate(self, vs) -> bool:
+    def validate(self) -> bool:
         valid = True
-        all = np.concatenate([getattr(self, f.name) for f in fields(self) ])
+        all = np.concatenate([self.parts[f] for f in self.parts])
         unique = np.unique(all)
         print(all.size, unique.size)
         if all.size != unique.size:
             print("overlapping vertices")
             valid =  False
-        if unique.size != vs:
+        if unique.size != self.count:
             print("missing vertices")
             valid = False
         return valid
 
-def from_flame(flame_mask: FlameMask) -> Mask:
-    m = Mask(
-        left_eyeball=flame_mask.get_vid_by_region("left_eyeball").cpu().numpy(),
-        right_eyeball=flame_mask.get_vid_by_region("right_eyeball").cpu().numpy(),
-        left_eye_region=flame_mask.get_vid_by_region("left_eye_region").cpu().numpy(),
-        right_eye_region=flame_mask.get_vid_by_region("right_eye_region").cpu().numpy(),
-        lips=flame_mask.get_vid_by_region("lips").cpu().numpy(),
-        nose=flame_mask.get_vid_by_region("nose").cpu().numpy(),
-        left_ear=flame_mask.get_vid_by_region("left_ear").cpu().numpy(),
-        right_ear=flame_mask.get_vid_by_region("right_ear").cpu().numpy(),
-        forehead=flame_mask.get_vid_by_region("forehead").cpu().numpy(),
-        neck=flame_mask.get_vid_by_region("neck").cpu().numpy(),
-        boundary=flame_mask.get_vid_by_region("boundary").cpu().numpy(),
-        # left_half=flame_mask.get_vid_by_region("left_half").cpu().numpy(),
-        # right_half=flame_mask.get_vid_by_region("right_half").cpu().numpy(),
-    )
-    vs=flame_mask.num_verts
+def _remove_dupes(parts: dict[str, NDArray[np.int32]], keep: str, cut: str):
+    if keep not in parts or cut not in parts:
+        return
+    parts[cut] = np.setdiff1d(parts[cut], parts[keep], assume_unique=True)
 
-    print(f"total verts: {vs}")
+def _fix_flame_parts(parts: dict[str, NDArray[np.int32]]):
+    for f in parts:
+        if f == "face":
+            continue
+        _remove_dupes(parts, f, cut="face")
+
+    _remove_dupes(parts,"forehead", "scalp")
+    _remove_dupes(parts,"left_eye_region", "forehead")
+    _remove_dupes(parts,"right_eye_region", "forehead")
+    _remove_dupes(parts,"boundary", "scalp")
+    _remove_dupes(parts,"boundary", "neck")
+    _remove_dupes(parts,"neck", "scalp")
+
+def _from_flame(getter, count:int, kind:Literal["vertex","face"], regions:list[str]) -> Mask:
+    parts = {}
+    for region in regions:
+        parts[region] = getter(region).cpu().numpy()
+
+    _fix_flame_parts(parts)
+
+    parts["remainder"] = np.setdiff1d(np.arange(count), np.concatenate(list(parts.values())))
+    m = Mask(parts=parts, count=count, kind=kind)
     m.search()
 
-    if not m.validate(vs):
+    if not m.validate():
         print("error in mask. overlap")
+        exit(1)
 
     return m
+
+def fmask_from_flame(flame_mask: FlameMask, regions: list[str]=FLAME_PARTS):
+    return _from_flame(flame_mask.get_fid_by_region, flame_mask.num_faces, "face", regions)
+
+def vmask_from_flame(flame_mask: FlameMask, regions: list[str]=FLAME_PARTS):
+    return _from_flame(flame_mask.get_vid_by_region, flame_mask.num_verts, "vertex", regions)

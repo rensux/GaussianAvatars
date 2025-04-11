@@ -7,6 +7,7 @@ import torch
 from plyfile import PlyData
 
 import blend
+from blend.mask import fmask_from_flame
 # from vht.model.flame import FlameHead
 from flame_model.flame import FlameHead
 
@@ -153,7 +154,7 @@ class BlendGaussianModel(GaussianModel):
         meshes[0] = self.verts.cpu().numpy()
         for i, p in enumerate(blends):
             meshes[i + 1] = load_mesh_from_flame(self.flame_model, p).cpu().numpy()
-        vert_mask = blend.mask.from_flame(self.flame_model.mask)
-        self.blend_model = blend.Model(self.faces.cpu().numpy(), meshes, vert_mask, MT_matrix_path)
+        mask = fmask_from_flame(self.flame_model.mask)
+        self.blend_model = blend.Model(self.faces.cpu().numpy(), meshes, mask, MT_matrix_path)
 
 
