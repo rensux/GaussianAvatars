@@ -42,8 +42,6 @@ def normalize_by(coeffs: NDArray[np.float32], dv: float, i: int):
     np.clip(coeffs, 0., 1., out=coeffs)
 
 
-
-
 @dataclass
 class PipelineConfig:
     debug: bool = False
@@ -90,8 +88,11 @@ class LocalViewer(Mini3DViewer):
         # self.init_gaussians()
 
         print("Initializing blend_data...")
-        self.reset_blend_param()
         self.init_blend_data()
+        ps = len(self.gaussians.blend_model.mask.verts)
+        ms = self.gaussians.coefficients.shape[0]
+        self.coeffs = np.zeros((ps, ms), dtype=np.float32)
+        self.coeffs[:,0] = np.ones(ps, dtype=np.float32)
 
         if self.gaussians.binding is not None:
             # rendering settings
@@ -327,12 +328,6 @@ class LocalViewer(Mini3DViewer):
         with open(path, "w") as f:
             json.dump(traj_dict, f, indent=4)
 
-    def reset_blend_param(self):
-        self.blend_params = {
-            "coefficients": np.zeros(len(cfg.blend_model_paths)+1,dtype=np.float32)
-        }
-        self.blend_params["coefficients"][0] = 1
-
     def define_gui(self):
         super().define_gui()
 
@@ -471,8 +466,8 @@ class LocalViewer(Mini3DViewer):
                         mask = self.gaussians.blend_model.mask
                         cmap = matplotlib.colormaps['tab20']
                         colors = [np.array(cmap(i / len(mask.parts))) for i in range(len(mask.parts))]
-                        face_colors = np.ndarray((1, mask.count, 3), dtype=np.float32)
-                        for i, fs in enumerate(mask.parts.values()):
+                        face_colors = np.ndarray((1, mask.f_count, 3), dtype=np.float32)
+                        for i, fs in enumerate(mask.faces):
                                 color=colors[i]
                                 bc = np.broadcast_to(color[:3].reshape(1,1,3), (1,len(fs),3))
                                 face_colors[:, fs, :] = bc
@@ -487,11 +482,8 @@ class LocalViewer(Mini3DViewer):
 
                     dpg.set_value("_checkbox_show_mesh", True)
                     self.need_update = True
-                items = ["none", "number of points per face"]
-                if self.gaussians.blend_model.mask.kind == "face":
-                    items += ["triangle per regions"]
                 dpg.add_combo(
-                    items,
+                    ["none", "number of points per face","triangle per regions"],
                     # default_value="triangle per regions",
                     default_value="none",
                     label="visualization",
@@ -579,54 +571,38 @@ class LocalViewer(Mini3DViewer):
                 label="Blend parameters",
                 tag="_blend_window",
                 autosize=True,
+                # min_size=(200,100),
                 pos=(self.W - 300, 0),
             ):
 
-                def callback_enable_control(sender, app_data):
-                    if app_data:
-                        self.gaussians.update_mesh_by_blending(self.blend_params)
-                    else:
-                        self.gaussians.select_mesh_by_timestep(self.timestep)
-                    self.need_update = True
-
-                dpg.add_checkbox(
-                    label="enable control",
-                    default_value=False,
-                    tag="_checkbox_enable_control",
-                    callback=callback_enable_control,
-                )
-
-                dpg.add_separator()
-
-                def callback_set_coefficient(index):
+                def callback_set_coefficient(region_i, mesh):
                     def callback(sender, app_data):
-                        dv = app_data - self.blend_params["coefficients"][index]
-                        self.blend_params["coefficients"][index] = app_data
-                        normalize_by(self.blend_params["coefficients"], dv, index)
-                        for i in range(len(self.blend_params["coefficients"])):
-                            dpg.set_value(f"_slider-blend-coefficient-{i}", self.blend_params["coefficients"][i])
+                        dv = app_data - self.coeffs[region_i,mesh]
+                        self.coeffs[region_i,mesh] = app_data
+                        normalize_by(self.coeffs[region_i], dv, mesh)
+                        region = self.gaussians.blend_model.mask.parts[region_i]
+                        for i in range(len(self.coeffs[region_i])):
+                            dpg.set_value(f"_slider-blend-coefficient-{region}-{i}", self.coeffs[region_i,i])
 
-                        if not dpg.get_value("_checkbox_enable_control"):
-                            dpg.set_value("_checkbox_enable_control", True)
-                        self.gaussians.update_mesh_by_blending(self.blend_params)
+                        self.gaussians.set_coefficient_and_blend(region_i, self.coeffs[region_i])
                         self.need_update = True
                     return callback
 
                 dpg.add_text("Coefficients")
-                self.coefficient_sliders = []
-                for mesh in range(len(self.blend_params["coefficients"])):
-                    with dpg.group(horizontal=True):
-                        dpg.add_slider_float(
-                            min_value=0,
-                            max_value=1,
-                            format="%.2f",
-                            default_value=self.blend_params["coefficients"][mesh],
-                            callback=callback_set_coefficient(mesh),
-                            tag=f"_slider-blend-coefficient-{mesh}",
-                            width=70,
-                        )
-                        self.coefficient_sliders.append(f"_slider-blend-coefficient-{mesh}")
-                        dpg.add_text(f"mesh{mesh}")
+                for i, region in enumerate(self.gaussians.blend_model.mask.parts):
+                    with dpg.collapsing_header(label=region, default_open=False):
+                        for mesh in range(self.gaussians.coefficients.shape[0]):
+                            with dpg.group(horizontal=True):
+                                dpg.add_slider_float(
+                                    min_value=0,
+                                    max_value=1,
+                                    format="%.2f",
+                                    default_value=self.coeffs[i,mesh],
+                                    callback=callback_set_coefficient(i, mesh),
+                                    tag=f"_slider-blend-coefficient-{region}-{mesh}",
+                                    width=100,
+                                )
+                                dpg.add_text(f"mesh{mesh}")
 
 
         # widget-dependent handlers ========================================================================================

@@ -4,10 +4,11 @@ from pathlib import Path
 import numpy
 import numpy as np
 import torch
+from numpy.typing import NDArray
 from plyfile import PlyData
 
 import blend
-from blend.mask import fmask_from_flame
+from blend.mask import from_flame
 # from vht.model.flame import FlameHead
 from flame_model.flame import FlameHead
 
@@ -55,19 +56,27 @@ class BlendGaussianModel(GaussianModel):
         self.verts = None
         self.verts_cano = None
         self.blend_model: blend.Model = None
-
-
+        self.coefficients = None
 
         # binding is initialized once the mesh topology is known
         if self.binding is None:
             self.binding = torch.arange(len(self.flame_model.faces)).cuda()
             self.binding_counter = torch.ones(len(self.flame_model.faces), dtype=torch.int32).cuda()
 
+    def reset_coefficients(self):
+        m = self.blend_model.cano_edges.shape[0]
+        v = self.blend_model.MT.shape[0]
+        self.coefficients = np.zeros((m,v), dtype=np.float32)
+        self.coefficients[0] = np.ones(v, dtype=np.float32)
 
-    def update_mesh_by_blending(self, blend_param):
-        coefficients = blend_param['coefficients']
+    def set_coefficient_and_blend(self, region, new_coeffs: NDArray[np.float32]):
+        v_mask = self.blend_model.mask.verts[region]
+        print(v_mask.shape, new_coeffs.shape, self.coefficients.shape)
+        print(self.coefficients[:,v_mask].shape)
+        print(new_coeffs.repeat(len(v_mask)).shape)
+        self.coefficients[:,v_mask] = new_coeffs.repeat(len(v_mask)).reshape((self.coefficients.shape[0], len(v_mask)))
+        v = self.blend_model.calc_mesh(self.coefficients)
 
-        v = self.blend_model.calc_mesh(coefficients)
         verts = torch.from_numpy(v).unsqueeze(0).cuda()
         self.update_mesh_properties(verts, None)
 
@@ -154,7 +163,8 @@ class BlendGaussianModel(GaussianModel):
         meshes[0] = self.verts.cpu().numpy()
         for i, p in enumerate(blends):
             meshes[i + 1] = load_mesh_from_flame(self.flame_model, p).cpu().numpy()
-        mask = fmask_from_flame(self.flame_model.mask)
+        mask = from_flame(self.flame_model.mask)
         self.blend_model = blend.Model(self.faces.cpu().numpy(), meshes, mask, MT_matrix_path)
+        self.reset_coefficients()
 
 

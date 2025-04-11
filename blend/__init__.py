@@ -35,11 +35,6 @@ class Model:
 # M x E x 3
 # M x E
 
-    def calc_vert_coefficients(self, mesh_coeffs: NDArray[np.float32]) -> NDArray[np.float32]:
-        # TODO: do per section
-        vs = self.MT.shape[0]
-        return np.repeat(mesh_coeffs[:,None], vs, axis=1)
-
     def calc_weighted_edges(self, vert_coeffs: NDArray[np.float32]) -> NDArray[np.float32]:
         """
         vert_coeffs: MxV
@@ -48,15 +43,12 @@ class Model:
         edge_weights = vert_coeffs @ self.vert_edge_binding # MxE
         return (edge_weights[:,:,None] * self.cano_edges).sum(axis=0)
 
-
-
-
     def calc_mesh(self, coefficients: NDArray[np.float32]):
         """
         coeffs: Mx1
         returns 1xM * MxEx3 = Ex3
         """
-        d = self.calc_weighted_edges(self.calc_vert_coefficients(coefficients)) # calc blended edges
+        d = self.calc_weighted_edges(coefficients) # calc blended edges
         MTd = self.MT.dot(d) # calc MTd
         # Run each column in parallel using cuda streams
         return self.LU.solve(MTd)
